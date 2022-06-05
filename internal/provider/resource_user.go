@@ -85,16 +85,25 @@ func resourceUser() *schema.Resource {
 func resourceUserCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) diag.Diagnostics {
 	c := meta.(*model.Client4)
 
+	email := d.Get("email").(string)
+	password := d.Get("password").(string)
+	isRandomPassword := false
+	if password == "-" {
+		isRandomPassword = true
+		password = genPassword(16, 2, 2, 6)
+	}
+
 	user := &model.User{
 		Username:    d.Get("username").(string),
-		Password:    d.Get("password").(string),
+		Password:    password,
 		AuthService: d.Get("auth_service").(string),
-		Email:       d.Get("email").(string),
+		Email:       email,
 		Nickname:    d.Get("nickname").(string),
 		FirstName:   d.Get("first_name").(string),
 		LastName:    d.Get("last_name").(string),
 		Locale:      d.Get("locale").(string),
 	}
+
 	if authData, ok := d.GetOk("auth_data"); ok {
 		ad := authData.(string)
 		user.AuthData = &ad
@@ -106,6 +115,12 @@ func resourceUserCreate(ctx context.Context, d *schema.ResourceData, meta interf
 	user, resp, err := c.CreateUser(user)
 	if err != nil {
 		return diag.Errorf("cannot create user: %v", fmtErr(resp, err))
+	}
+	if isRandomPassword {
+		resp, err = c.SendPasswordResetEmail(email)
+		if err != nil {
+			return diag.Errorf("cannot reset password for user: %v", fmtErr(resp, err))
+		}
 	}
 
 	d.SetId(user.Id)
